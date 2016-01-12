@@ -48,4 +48,9 @@ public class MvcConfig extends WebMvcConfigurerAdapter {
         converters.add(stringConverter);
         converters.add(jsonConverter);
     }
+    
+    @Override
+    public void addResourceHandlers(ResourceHandlerRegistry registry) {
+        registry.addResourceHandler("/js/**").addResourceLocations("/js/").setCachePeriod(31556926);
+    }
 }
