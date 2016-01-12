@@ -10,9 +10,12 @@
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <maven-resources-plugin.version>2.5</maven-resources-plugin.version>
+    <maven-dependency-plugin.version>2.1</maven-dependency-plugin.version>
     <jdk-version>1.6</jdk-version>
     <junit-version>4.11</junit-version>
     <spring-version>3.2.4.RELEASE</spring-version>
+    <conf.path>/src/main/conf/</conf.path>
   </properties>
 
   <dependencies>
@@ -208,6 +211,90 @@
   </dependencies>
 
   <build>
-    <finalName>template</finalName>
+    <finalName>${project.artifactId}-${project.version}</finalName>
+    <plugins>
+      <!-- 解决Language level 重置的问题 -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>2.3.2</version>
+        <configuration>
+          <source>${jdk-version}</source>
+          <target>${jdk-version}</target>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-resources-plugin</artifactId>
+        <version>${maven-resources-plugin.version}</version>
+        <executions>
+          <execution>
+            <id>copy-properties</id>
+            <phase>validate</phase>
+            <configuration>
+              <outputDirectory>${basedir}/target/classes</outputDirectory>
+              <resources>
+                <resource>
+                  <directory>${basedir}${conf.path}${env}</directory>
+                  <includes>
+                    <include>*.properties</include>
+                  </includes>
+                </resource>
+              </resources>
+            </configuration>
+            <goals>
+              <goal>copy-resources</goal>
+            </goals>
+          </execution>
+          <execution>
+            <id>copy-properties-cache</id>
+            <phase>validate</phase>
+            <configuration>
+              <outputDirectory>${basedir}/target/classes</outputDirectory>
+              <resources>
+                <resource>
+                  <directory>${basedir}${conf.path}${env}</directory>
+                  <includes>
+                    <include>*.properties</include>
+                  </includes>
+                </resource>
+              </resources>
+            </configuration>
+            <goals>
+              <goal>copy-resources</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-dependency-plugin</artifactId>
+        <version>${maven-dependency-plugin.version}</version>
+        <executions>
+          <execution>
+            <id>copy-installed</id>
+            <phase>install</phase>
+            <goals>
+              <goal>copy</goal>
+            </goals>
+            <configuration>
+              <artifactItems>
+                <artifactItem>
+                  <groupId>${project.groupId}</groupId>
+                  <artifactId>${project.artifactId}</artifactId>
+                  <version>${project.version}</version>
+                  <type>${project.packaging}</type>
+
+                </artifactItem>
+              </artifactItems>
+              <outputDirectory>/home/outputpackage/${project.name}</outputDirectory>
+              <overWriteReleases>false</overWriteReleases>
+              <overWriteSnapshots>true</overWriteSnapshots>
+
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
   </build>
 </project>
