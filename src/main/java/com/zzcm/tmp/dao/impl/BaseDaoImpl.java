@@ -87,6 +87,35 @@ public abstract class BaseDaoImpl<T,K extends Serializable> implements BaseDao<T
         }
         return null;
     }
+    
+    public int batchInsert(List<T> beans) {
+        if(null==beans || beans.isEmpty()) return 0;
+        for (int i = 0; i < beans.size(); i++) {
+            em.persist(beans.get(i));
+            if (i % 50 == 0) {
+                em.flush();
+                em.clear();
+            }
+        }
+
+        //EntityTransaction transaction = em.getTransaction();
+        //transaction.begin();
+        //Session session = (Session) em.getDelegate();
+        //session.setFlushMode(FlushMode.MANUAL);
+        //int batchSize = 100;
+        //int i=0;
+        //for (T bean : beans) {
+        //    session.save(bean);
+        //    i++;
+        //    if(i%batchSize==0){
+        //        session.flush();
+        //        session.clear();
+        //    }
+        //}
+        //transaction.commit();
+
+        return beans.size();
+    }
 
     protected Class<T> getBeanClass(){
         if(null == beanClass){
