@@ -1,0 +1,291 @@
+package com.zzcm.tmp.utils;
+
+import org.apache.commons.httpclient.HttpClient;
+import org.apache.commons.httpclient.methods.PostMethod;
+import org.apache.commons.httpclient.methods.StringRequestEntity;
+import org.apache.commons.httpclient.protocol.Protocol;
+import org.apache.commons.httpclient.protocol.ProtocolSocketFactory;
+import org.apache.http.HttpEntity;
+import org.apache.http.HttpResponse;
+import org.apache.http.NameValuePair;
+import org.apache.http.StatusLine;
+import org.apache.http.client.ClientProtocolException;
+import org.apache.http.client.ResponseHandler;
+import org.apache.http.client.config.RequestConfig;
+import org.apache.http.client.fluent.Executor;
+import org.apache.http.client.fluent.Form;
+import org.apache.http.client.fluent.Request;
+import org.apache.http.conn.ssl.NoopHostnameVerifier;
+import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
+import org.apache.http.conn.ssl.TrustStrategy;
+import org.apache.http.entity.ContentType;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClientBuilder;
+import org.apache.http.ssl.SSLContextBuilder;
+import org.apache.http.util.EntityUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import javax.net.ssl.SSLContext;
+import java.io.BufferedInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.security.cert.CertificateException;
+import java.security.cert.X509Certificate;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * Created by Administrator on 2016/1/27.
+ */
+public class HttpUtil {
+    private static final Logger LOG = LoggerFactory.getLogger(HttpUtil.class);
+    private static final int T_SOCKET = 20 * 1000;
+    private static final int T_CONNECT = 20 * 1000;
+    public static final int POOL_SIZE = 20;
+
+    private static CloseableHttpClient httpClient;
+    private static Executor executor;
+
+    static{
+        //访问HTTPS，解决PKIK和host name does not match ... 等bug
+        SSLContext sslContext =null;
+        try {
+             sslContext = new SSLContextBuilder().loadTrustMaterial(null, new TrustStrategy() {
+                //信任所有
+                @Override
+                public boolean isTrusted(X509Certificate[] x509Certificates, String s) throws CertificateException {
+                    return true;
+                }
+            }).build();
+        } catch (Exception e) {
+            sslContext =null;
+        }
+        SSLConnectionSocketFactory sslcsf;
+        if(null!=sslContext){
+            sslcsf = new SSLConnectionSocketFactory(sslContext,NoopHostnameVerifier.INSTANCE);
+        }else{
+            sslcsf = SSLConnectionSocketFactory.getSystemSocketFactory();
+        }
+
+        RequestConfig requestConfig = RequestConfig.custom()
+                .setSocketTimeout(T_SOCKET)
+                .setConnectTimeout(T_CONNECT).build();
+        httpClient = HttpClientBuilder.create()
+                .setMaxConnTotal(POOL_SIZE)
+                .setMaxConnPerRoute(POOL_SIZE)
+                .setSSLSocketFactory(sslcsf)
+                .setDefaultRequestConfig(requestConfig)
+                .build();
+        executor = Executor.newInstance(httpClient);
+    }
+
+    public static String get(String url){
+        try {
+            return executor.execute(Request.Get(url)).returnContent().asString();
+        } catch (IOException e) {
+            LOG.error("get["+url+"] failed:"+e.getMessage());
+            return null;
+        }
+    }
+
+    public static byte[] getBytes(String url){
+        try {
+            return executor.execute(Request.Get(url)).returnContent().asBytes();
+        } catch (IOException e) {
+            LOG.error("getBytes["+url+"] failed:"+e.getMessage());
+            return null;
+        }
+    }
+
+    public static String post(String url,Map<String,Object> map){
+        try {
+            List<NameValuePair> list = null;
+            if(null!=map){
+                Form form = Form.form();
+                for (Map.Entry<String, Object> entry : map.entrySet()) {
+                    form.add(entry.getKey(),entry.getValue().toString());
+                }
+                list = form.build();
+            }
+            return executor.execute(Request.Post(url).bodyForm(list)).returnContent().asString();
+        } catch (IOException e) {
+            LOG.error("post[" + url + "] params:["+map+"] failed:" + e.getMessage());
+            return null;
+        }
+    }
+
+    public static byte[] postBytes(String url,Map<String,Object> map){
+        try {
+            List<NameValuePair> list = null;
+            if(null!=map){
+                Form form = Form.form();
+                for (Map.Entry<String, Object> entry : map.entrySet()) {
+                    form.add(entry.getKey(),entry.getValue().toString());
+                }
+                list = form.build();
+            }
+            return executor.execute(Request.Post(url).bodyForm(list)).returnContent().asBytes();
+        } catch (IOException e) {
+            LOG.error("postBytes[" + url + "] params:["+map+"] failed:" + e.getMessage());
+            return null;
+        }
+    }
+
+    public static String getH(final String url){
+        try {
+            return executor.execute(Request.Get(url)).handleResponse(new ResponseHandler<String>() {
+                @Override
+                public String handleResponse(HttpResponse response) throws ClientProtocolException, IOException {
+                    StatusLine statusLine = response.getStatusLine();
+                    HttpEntity entity = response.getEntity();
+                    if (statusLine.getStatusCode() != 200) {
+                        if (LOG.isDebugEnabled()) {
+                            LOG.debug("getH[" + url + "] statusCode:" + statusLine.getStatusCode());
+                        }
+                        return null;
+                    }
+                    if (null == entity) {
+                        if (LOG.isDebugEnabled()) {
+                            LOG.debug("getH[" + url + "] entity is null.");
+                        }
+                        return null;
+                    }
+                    String res = EntityUtils.toString(entity, "UTF-8");
+                    EntityUtils.consume(entity);
+                    return res;
+                }
+            });
+        } catch (IOException e) {
+            LOG.error("getH["+url+"] failed:"+e.getMessage());
+            return null;
+        }
+    }
+
+    public static String postH(final String url,final Map<String,Object> map){
+        try {
+            List<NameValuePair> list = null;
+            if(null!=map){
+                Form form = Form.form();
+                for (Map.Entry<String, Object> entry : map.entrySet()) {
+                    form.add(entry.getKey(),entry.getValue().toString());
+                }
+                list = form.build();
+            }
+            return executor.execute(Request.Post(url).bodyForm(list)).handleResponse(new ResponseHandler<String>() {
+                @Override
+                public String handleResponse(HttpResponse response) throws ClientProtocolException, IOException {
+                    StatusLine statusLine = response.getStatusLine();
+                    HttpEntity entity = response.getEntity();
+                    if (statusLine.getStatusCode() != 200) {
+                        if (LOG.isDebugEnabled()) {
+                            LOG.debug("postH[" + url + "] params:[" + map + "] statusCode:" + statusLine.getStatusCode());
+                        }
+                        return null;
+                    }
+                    if (null == entity) {
+                        if (LOG.isDebugEnabled()) {
+                            LOG.debug("postH[" + url + "] params:[" + map + "] entity is null.");
+                        }
+                        return null;
+                    }
+                    String res = EntityUtils.toString(entity, "UTF-8");
+                    EntityUtils.consume(entity);
+                    return res;
+                }
+            });
+        } catch (IOException e) {
+            LOG.error("postH[" + url + "] params:["+map+"] failed:" + e.getMessage());
+            return null;
+        }
+    }
+
+    public static String postH(final String url,final String params){
+        try {
+            //ContentType.APPLICATION_OCTET_STREAM
+            //ContentType.APPLICATION_JSON
+            //ProtocolSocketFactory psf = new MySecureProtocolSocketFactory();
+            //Protocol protocol = new Protocol("https",psf,443);
+            //Protocol.registerProtocol("https",protocol);
+            return executor.execute(Request.Post(url).bodyString(params, ContentType.APPLICATION_JSON)).handleResponse(new ResponseHandler<String>() {
+                @Override
+                public String handleResponse(HttpResponse response) throws ClientProtocolException, IOException {
+                    StatusLine statusLine = response.getStatusLine();
+                    HttpEntity entity = response.getEntity();
+                    if (statusLine.getStatusCode() != 200) {
+                        if (LOG.isDebugEnabled()) {
+                            LOG.debug("postH[" + url + "] params:[" + params + "] statusCode:" + statusLine.getStatusCode());
+                        }
+                        return null;
+                    }
+                    if (null == entity) {
+                        if (LOG.isDebugEnabled()) {
+                            LOG.debug("postH[" + url + "] params:[" + params + "] entity is null.");
+                        }
+                        return null;
+                    }
+                    String res = EntityUtils.toString(entity, "UTF-8");
+                    EntityUtils.consume(entity);
+                    return res;
+                }
+            });
+        } catch (IOException e) {
+            LOG.error("postH[" + url + "] params:["+params+"] failed:" + e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * 老版本的httpclient
+     * @param url
+     * @param params
+     * @return
+     */
+    public static String postO(String url,String params){
+        BufferedInputStream bis = null;
+        ByteArrayOutputStream bos = null;
+        try {
+            HttpClient httpClient = new HttpClient();
+            PostMethod post = new PostMethod(url);
+            StringRequestEntity requestEntity = new StringRequestEntity(params,"application/json","UTF-8");
+            post.setRequestEntity(requestEntity);
+            ProtocolSocketFactory psf = new MySecureProtocolSocketFactory();
+            Protocol protocol = new Protocol("https",psf,443);
+            Protocol.registerProtocol("https",protocol);
+            int code = httpClient.executeMethod(post);
+            if(code!=200){
+                LOG.error("postO["+url+"] failed statusCode:"+code);
+                return null;
+            }
+            bis = new BufferedInputStream(post.getResponseBodyAsStream());
+            byte[] bytes = new byte[1024];
+            bos = new ByteArrayOutputStream();
+            int cnt = 0;
+            while((cnt=bis.read(bytes))!=-1){
+                bos.write(bytes,0,cnt);
+            }
+            bos.flush();
+            byte[] strBytes = bos.toByteArray();
+            return new String(strBytes);
+        } catch (Exception e) {
+            LOG.error("postO["+url+"] error:"+e.getMessage());
+        }finally {
+            if(null!=bos){
+                try {
+                    bos.close();
+                } catch (IOException e) {
+                }
+                bos = null;
+            }
+            if(null!=bis){
+                try {
+                    bis.close();
+                } catch (IOException e) {
+                }
+                bis = null;
+            }
+        }
+        return null;
+    }
+
+}
